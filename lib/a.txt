@@ -1,0 +1,584 @@
+import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
+import 'dart:convert';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomeScreen(),
+    );
+  }
+}
+
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  final TextEditingController taskController = TextEditingController();
+  List<Map<String, dynamic>> taskList = []; // Changed to dynamic
+  int completedTasks = 0;
+  String? errorMessage;
+  late FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTasks();
+    _initNotifications(); // Initialize the notification plugin
+  }
+
+  Future<void> _loadTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final tasksJson = prefs.getString('tasks');
+    if (tasksJson != null) {
+      final tasks = jsonDecode(tasksJson) as List;
+      setState(() {
+        taskList = tasks.map((task) => {
+          'task': task['task'],
+          'date': task['date'],
+          'time': task['time'],
+          'category': task['category'],
+          'isCompleted': task['isCompleted'],
+        }).toList();
+        completedTasks = taskList.where((task) => task['isCompleted'] == 'true').length;
+      });
+    }
+  }
+
+  Future<void> _initNotifications() async {
+    flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin(); // Initialize here
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher'); // Use default launcher icon
+    final DarwinInitializationSettings initializationSettingsDarwin =
+        DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    final InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
+    );
+    await flutterLocalNotificationsPlugin.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: onSelectNotification,
+    );
+  }
+
+  Future<void> onSelectNotification(NotificationResponse? notificationResponse) async {
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: Text(notificationResponse!.payload!),
+        content: Text('Task is due'),
+      ),
+    );
+  }
+
+  Future<void> _scheduleNotification(
+    String task,
+    DateTime date,
+    TimeOfDay time,
+  ) async {
+    final DateTime scheduledDate = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      time.hour,
+      time.minute,
+    );
+    final AndroidNotificationDetails androidPlatformChannelSpecifics =
+        const AndroidNotificationDetails(
+      'com.example.task_tracker', // Changed to a valid channel id
+      'Task Notifications',
+      channelDescription: 'Task due notifications',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    final NotificationDetails platformChannelSpecifics =
+        NotificationDetails(android: androidPlatformChannelSpecifics);
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      0,
+      'Task Due',
+      'Task "$task" is due at $scheduledDate',
+      tz.TZDateTime.from(scheduledDate, tz.local),
+      platformChannelSpecifics,
+      androidAllowWhileIdle: true,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  }
+
+  Future<void> _saveTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('tasks', jsonEncode(taskList));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Task Tracker", style: GoogleFonts.roboto()),
+        backgroundColor: Color(0xFF399EF6),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.notifications),
+            onPressed: () {
+              // Add your action here
+            },
+          ),
+          IconButton(
+            icon: Icon(Icons.pie_chart),
+            onPressed: () {
+              // Add your action here
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Progress Bar
+          Container(
+            height: 50,
+            width: double.infinity,
+            padding: const EdgeInsets.all(10.0),
+            decoration: const BoxDecoration(
+              color: Color(0xFF399EF6),
+              borderRadius: BorderRadius.only(
+                bottomLeft: Radius.circular(20),
+                bottomRight: Radius.circular(20),
+              ),
+            ),
+            child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                "You finished ${taskList.isEmpty ? 0 : (completedTasks / taskList.length * 100).toStringAsFixed(0)}%",
+                style: TextStyle(color: Colors.white),
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: LinearProgressIndicator(
+                  value:
+                      taskList.isEmpty ? 0 : completedTasks / taskList.length,
+                  backgroundColor: Colors.white,
+                  color: Colors.green,
+                  minHeight: 10,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          taskList.isEmpty
+              ? Padding(
+                  padding: const EdgeInsets.all(20.0),
+                  child:
+                      Text("No tasks added yet!", style: GoogleFonts.roboto()),
+                )
+              : Expanded(
+                  child: ListView.builder(
+                    itemCount: taskList.length,
+                    itemBuilder: (context, index) {
+                      return Card(
+                        elevation: 2,
+                        margin:
+                            EdgeInsets.symmetric(vertical: 5, horizontal: 10),
+                        child: ListTile(
+                          title: Text(taskList[index]['task'] ?? '',
+                              style: GoogleFonts.roboto()),
+                          subtitle: Text(
+                              "${taskList[index]['date']} - ${taskList[index]['time']} - ${taskList[index]['category']}",
+                              style: TextStyle(color: Colors.grey[600])),
+                          trailing: Checkbox(
+                            value: taskList[index]['isCompleted'] == 'true',
+                            onChanged: (bool? checked) {
+                              setState(() {
+                                taskList[index]['isCompleted'] =
+                                    checked! ? 'true' : 'false';
+                                completedTasks = taskList
+                                    .where(
+                                        (task) => task['isCompleted'] == 'true')
+                                    .length;
+                                _saveTasks();
+                              });
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),),
+          if (errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Text(
+                errorMessage!,
+                style: TextStyle(color: Colors.red),
+              ),
+            ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          showDialog(
+            context: context,
+            builder: (BuildContext context) {
+              DateTime? selectedDate;
+              TimeOfDay? selectedTime;
+              String? selectedCategory = 'Work'; // Default category
+              List<String> categories = ['Work', 'Personal', 'Study'];
+
+              return AlertDialog(
+                title: Text("Add Task", style: GoogleFonts.roboto()),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: taskController,
+                      decoration: InputDecoration(hintText: 'Enter your task'),
+                    ),
+                    SizedBox(height: 10),
+                    TextButton(
+                      child: Text("Pick Date"),
+                      onPressed: () {
+                        showDatePicker(
+                          context: context,
+                          initialDate: DateTime.now(),
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime(2030),
+                        ).then((pickedDate) {
+                          if (pickedDate != null) {
+                            setState(() {
+                              selectedDate = pickedDate;
+                              errorMessage = null;
+                            });
+                          } else {
+                            setState(() {
+                              errorMessage = "Please select a date.";
+                            });
+                          }
+                        });
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    TextButton(
+                      child: Text("Pick Time"),
+                      onPressed: () {
+                        showTimePicker(
+                          context: context,
+                          initialTime: TimeOfDay.now(),
+                        ).then((pickedTime) {
+                          if (pickedTime != null) {
+                            setState(() {
+                              selectedTime = pickedTime;
+                              errorMessage = null;
+                            });
+                          } else {
+                            setState(() {
+                              errorMessage = "Please select a time.";
+                            });
+                          }
+                        });
+                      },
+                    ),
+                    SizedBox(height: 10),
+                    DropdownButtonFormField<String>(
+                      value: selectedCategory,
+                      items: categories
+                          .map((category) => DropdownMenuItem<String>(
+                                child: Text(category),
+                                value: category,
+                              ))
+                          .toList(),
+                      onChanged: (value) {
+                        setState(() {
+                          selectedCategory = value;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    child: Text("Cancel"),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                    },
+                  ),
+                  TextButton(
+                    child: Text("Add"),
+                    onPressed: () {
+                      if (taskController.text.isEmpty) {
+                        setState(() {
+                          errorMessage = "Please enter a task.";
+                        });
+                        return;
+                      }
+                      if (selectedDate == null || selectedTime == null) {
+                        setState(() {
+                          errorMessage = "Please select both date and time.";
+                        });
+                        return;
+                      }
+                      setState(() {
+                        taskList.add({
+                          'task': taskController.text,
+                          'date':
+                              DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                                      'time': selectedTime!.format(context),
+                          'category': selectedCategory ?? '',
+                          'isCompleted': 'false',
+                        });
+                        _saveTasks();
+                        _scheduleNotification(
+                            taskController.text, selectedDate!, selectedTime!);
+                        taskController.clear();
+                        errorMessage = null;
+                        Navigator.of(context).pop();
+                      });
+                    },
+                  ),
+                ],
+              );
+            },
+          );
+        },
+        child: Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+         import 'package:flutter/material.dart';
+import 'package:fl_chart/fl_chart.dart';
+
+class ChartScreen extends StatelessWidget {
+  final int completedTasks;
+  final int totalTasks;
+  final int workTasks;
+  final int personalTasks;
+  final int studyTasks;
+
+  const ChartScreen({
+    Key? key,
+    required this.completedTasks,
+    required this.totalTasks,
+    required this.workTasks,
+    required this.personalTasks,
+    required this.studyTasks,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Task Statistics"),
+        backgroundColor: Color(0xFF399EF6),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text("Tasks Overview",
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            SizedBox(height: 20),
+            Expanded(
+              child: BarChart(
+                BarChartData(
+                  barGroups: [
+                    BarChartGroupData(
+                      x: 0,
+                      barRods: [
+                        BarChartRodData(
+                          toY: completedTasks.toDouble(),
+                          color: Colors.green,
+                          width: 30,
+                        ),
+                        BarChartRodData(
+                          toY: (totalTasks - completedTasks).toDouble(),
+                          color: Colors.red,
+                          width: 30,
+                        ),
+                      ],
+                    ),
+                  ],
+                  titlesData: FlTitlesData(
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(showTitles: true),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: true),
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          "Category Breakdown",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 15),
+                        Expanded(
+                          child: PieChart(
+                            PieChartData(
+                              sections: [
+                                PieChartSectionData(
+                                  color: Colors.blue,
+                                  value: workTasks.toDouble(),
+                                  title: 'Work',
+                                  radius: 50,
+                                  titleStyle: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                                PieChartSectionData(
+                                  color: Colors.orange,
+                                  value: personalTasks.toDouble(),
+                                  title: 'Personal',
+                                  radius: 50,
+                                  titleStyle: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                                PieChartSectionData(
+                                  color: Colors.purple,
+                                  value: studyTasks.toDouble(),
+                                  title: 'Study',
+                                  radius: 50,
+                                  titleStyle: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                              ],
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 40,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(width: 25),
+                  Expanded(
+                    child: Column(
+                      children: [
+                        Text(
+                          "Task Completion",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 15),
+                        Expanded(
+                          child: PieChart(
+                            PieChartData(
+                              sections: [
+                                PieChartSectionData(
+                                  color: Colors.green,
+                                  value: completedTasks.toDouble(),
+                                  title: 'Completed',
+                                  radius: 50,
+                                  titleStyle: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                                PieChartSectionData(
+                                  color: Colors.red,
+                                  value:
+                                      (totalTasks - completedTasks).toDouble(),
+                                  title: 'Remaining',
+                                  radius: 50,
+                                  titleStyle: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white),
+                                ),
+                              ],
+                              sectionsSpace: 2,
+                              centerSpaceRadius: 40,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+                 

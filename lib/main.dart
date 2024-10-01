@@ -1,9 +1,9 @@
 import 'package:daily_task_tracker/ChartScreen.dart';
 import 'package:daily_task_tracker/ReminderScreen.dart';
 import 'package:flutter/material.dart';
-
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
+//import 'package:flutter_segmented_button/flutter_segmented_button.dart';
 
 void main() {
   runApp(MyApp());
@@ -29,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, String>> taskList = [];
   int completedTasks = 0;
   String? errorMessage;
+  bool _isNotificationEnabled = true;
+  String _selectedFilter = 'All'; // Filter variable
 
   @override
   void initState() {
@@ -63,8 +65,154 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setStringList('tasks', tasks);
   }
 
+  Future<void> _editTask(
+      int index, String newTask, String newDate, String newCategory) async {
+    setState(() {
+      taskList[index]['task'] = newTask;
+      taskList[index]['date'] = newDate;
+      taskList[index]['category'] = newCategory;
+      _saveTasks(); // Save tasks after editing
+    });
+  }
+
+  void _toggleCompletion(int index, bool? isChecked) {
+    setState(() {
+      taskList[index]['isCompleted'] = isChecked! ? 'true' : 'false';
+      completedTasks =
+          taskList.where((task) => task['isCompleted'] == 'true').length;
+      _saveTasks(); // Save tasks after completion change
+    });
+  }
+
+  void _deleteTask(int index) {
+    setState(() {
+      taskList.removeAt(index);
+      _saveTasks(); // Save tasks after deletion
+    });
+  }
+
+  void _showTaskDialog({int? index}) {
+    String? selectedCategory = 'Work'; // Default category
+    DateTime? selectedDate;
+    if (index != null) {
+      selectedCategory = taskList[index]['category'];
+      taskController.text = taskList[index]['task']!;
+      selectedDate = DateTime.parse(taskList[index]['date']!);
+    }
+
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text(index == null ? "Add Task" : "Edit Task",
+              style: GoogleFonts.roboto()),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: taskController,
+                decoration: InputDecoration(hintText: 'Enter your task'),
+              ),
+              SizedBox(height: 10),
+              TextButton(
+                child: Text("Pick Date"),
+                onPressed: () {
+                  showDatePicker(
+                    context: context,
+                    initialDate: selectedDate ?? DateTime.now(),
+                    firstDate: DateTime.now(),
+                    lastDate: DateTime(2030),
+                  ).then((pickedDate) {
+                    if (pickedDate != null) {
+                      setState(() {
+                        selectedDate = pickedDate;
+                        errorMessage = null; // Clear error message
+                      });
+                    } else {
+                      setState(() {
+                        errorMessage = "Please select a date.";
+                      });
+                    }
+                  });
+                },
+              ),
+              SizedBox(height: 10),
+              DropdownButton<String>(
+                value: selectedCategory,
+                items: ['Work', 'Personal', 'Study'].map((String category) {
+                  return DropdownMenuItem<String>(
+                    value: category,
+                    child: Text(category),
+                  );
+                }).toList(),
+                onChanged: (String? newCategory) {
+                  setState(() {
+                    selectedCategory = newCategory;
+                  });
+                },
+              ),
+              if (errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Text(
+                    errorMessage!,
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                if (taskController.text.isEmpty ||
+                    selectedDate == null ||
+                    selectedCategory == null) {
+                  setState(() {
+                    errorMessage = "Please fill all fields.";
+                  });
+                } else {
+                  if (index == null) {
+                    // Add new task
+                    setState(() {
+                      taskList.add({
+                        'task': taskController.text,
+                        'date':
+                            selectedDate!.toLocal().toString().split(' ')[0],
+                        'category': selectedCategory!,
+                        'isCompleted': 'false',
+                      });
+                      taskController.clear();
+                      errorMessage = null;
+                    });
+                  } else {
+                    // Edit existing task
+                    _editTask(
+                        index,
+                        taskController.text,
+                        selectedDate!.toLocal().toString().split(' ')[0],
+                        selectedCategory!);
+                  }
+                  _saveTasks(); // Save tasks after adding or editing
+                  Navigator.of(context).pop();
+                }
+              },
+              child: Text(index == null ? "Add" : "Save"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Create a filtered task list based on the selected filter
+    List<Map<String, String>> filteredTasks = _selectedFilter == 'All'
+        ? taskList
+        : taskList
+            .where((task) => task['category'] == _selectedFilter)
+            .toList();
+
     return Scaffold(
       appBar: AppBar(
         title: Text("Task Tracker", style: GoogleFonts.roboto()),
@@ -79,27 +227,59 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             },
           ),
-           IconButton(
-      icon: Icon(Icons.pie_chart), // Use an appropriate icon for charts
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => ChartScreen(
-              completedTasks: completedTasks,
-              totalTasks: taskList.length,
-            ),
-          ),
-        );
-      },
-    ),
+          IconButton(
+            icon: Icon(Icons.pie_chart),
+            onPressed: () {
+              int workTasks =
+                  taskList.where((task) => task['category'] == 'Work').length;
+              int personalTasks = taskList
+                  .where((task) => task['category'] == 'Personal')
+                  .length;
+              int studyTasks =
+                  taskList.where((task) => task['category'] == 'Study').length;
+
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChartScreen(
+                    completedTasks: completedTasks,
+                    totalTasks: taskList.length,
+                    workTasks: workTasks,
+                    personalTasks: personalTasks,
+                    studyTasks: studyTasks,
+                  ),
+                ),
+              );
+            },
+          )
         ],
       ),
       body: Column(
         children: [
+          // Segmented Control for filtering tasks
+          Container(
+            width: double.infinity,
+            color: Color(0xFF399EF6),
+            padding: const EdgeInsets.all(10.0),
+            child: SegmentedButton<String>(
+              segments: const <ButtonSegment<String>>[
+                ButtonSegment<String>(value: 'All', label: Text('All')),
+                ButtonSegment<String>(value: 'Work', label: Text('Work')),
+                ButtonSegment<String>(
+                    value: 'Personal', label: Text('Personal')),
+                ButtonSegment<String>(value: 'Study', label: Text('Study')),
+              ],
+              selected: {_selectedFilter},
+              onSelectionChanged: (Set<String> newSelection) {
+                setState(() {
+                  _selectedFilter = newSelection.first;
+                });
+              },
+            ),
+          ),
           // Progress Bar
           Container(
-            height: 50,
+            height: 60,
             width: double.infinity,
             padding: const EdgeInsets.all(10.0),
             decoration: const BoxDecoration(
@@ -111,11 +291,11 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Text(
-                    "You finished ${taskList.isEmpty ? 0 : (completedTasks / taskList.length * 100).toStringAsFixed(0)}%",
-                    style: TextStyle(color: Colors.white)),
+                  "You finished ${taskList.isEmpty ? 0 : (completedTasks / taskList.length * 100).toStringAsFixed(0)}%",
+                  style: TextStyle(color: Colors.white),
+                ),
                 SizedBox(width: 10),
                 Expanded(
                   child: LinearProgressIndicator(
@@ -130,7 +310,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           SizedBox(height: 10),
-          taskList.isEmpty
+          filteredTasks.isEmpty
               ? Padding(
                   padding: const EdgeInsets.all(20.0),
                   child:
@@ -138,158 +318,93 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : Expanded(
                   child: ListView.builder(
-                    itemCount: taskList.length,
+                    itemCount: filteredTasks.length,
                     itemBuilder: (context, index) {
                       return Card(
                         elevation: 2,
                         margin:
                             EdgeInsets.symmetric(vertical: 5, horizontal: 10),
                         child: ListTile(
-                          title: Text(taskList[index]['task'] ?? '',
+                          title: Text(filteredTasks[index]['task'] ?? '',
                               style: GoogleFonts.roboto()),
                           subtitle: Text(
-                              "${taskList[index]['date']} - ${taskList[index]['category']}",
+                              "${filteredTasks[index]['date']} - ${filteredTasks[index]['category']}",
                               style: TextStyle(color: Colors.grey[600])),
-                          trailing: Checkbox(
-                            value: taskList[index]['isCompleted'] == 'true',
-                            onChanged: (bool? checked) {
-                              setState(() {
-                                taskList[index]['isCompleted'] =
-                                    checked! ? 'true' : 'false';
-                                completedTasks = taskList
-                                    .where(
-                                        (task) => task['isCompleted'] == 'true')
-                                    .length;
-                                _saveTasks(); // Save tasks after completion change
-                              });
-                            },
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Checkbox(
+                                value: filteredTasks[index]['isCompleted'] ==
+                                    'true',
+                                onChanged: (bool? checked) {
+                                  _toggleCompletion(
+                                      taskList.indexOf(filteredTasks[index]),
+                                      checked);
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.edit),
+                                onPressed: () => _showTaskDialog(
+                                    index:
+                                        taskList.indexOf(filteredTasks[index])),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.delete),
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (BuildContext context) {
+                                      return AlertDialog(
+                                        title: Text("Delete Task",
+                                            style: GoogleFonts.roboto()),
+                                        content: Text(
+                                            "Are you sure you want to delete this task?"),
+                                        actions: [
+                                          TextButton(
+                                            child: Text("Cancel"),
+                                            onPressed: () {
+                                              Navigator.of(context).pop();
+                                            },
+                                          ),
+                                          TextButton(
+                                            child: Text("Delete"),
+                                            onPressed: () {
+                                              _deleteTask(taskList.indexOf(
+                                                  filteredTasks[index]));
+                                              Navigator.of(context).pop();
+                                            },
+                                          ),
+                                        ],
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: Icon(_isNotificationEnabled
+                                    ? Icons.notifications
+                                    : Icons.notifications_off),
+                                onPressed: () {
+                                  setState(() {
+                                    _isNotificationEnabled =
+                                        !_isNotificationEnabled;
+                                  });
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       );
                     },
                   ),
                 ),
-          // Display error message if exists
-          if (errorMessage != null)
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                errorMessage!,
-                style: TextStyle(color: Colors.red),
-              ),
-            ),
+          SizedBox(height: 10),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          showDialog(
-            context: context,
-            builder: (BuildContext context) {
-              DateTime? selectedDate;
-              String? selectedCategory = 'Work'; // Default category
-              List<String> categories = ['Work', 'Personal', 'Study'];
-
-              return AlertDialog(
-                title: Text("Add Task", style: GoogleFonts.roboto()),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: taskController,
-                      decoration: InputDecoration(hintText: 'Enter your task'),
-                    ),
-                    SizedBox(height: 10),
-                    TextButton(
-                      child: Text("Pick Date"),
-                      onPressed: () {
-                        showDatePicker(
-                          context: context,
-                          initialDate: DateTime.now(),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(2030),
-                        ).then((pickedDate) {
-                          if (pickedDate != null) {
-                            setState(() {
-                              selectedDate = pickedDate;
-                              errorMessage = null; // Clear error message
-                            });
-                          } else {
-                            setState(() {
-                              errorMessage = "Please select a date.";
-                            });
-                          }
-                        });
-                      },
-                    ),
-                    SizedBox(height: 10),
-                    DropdownButton<String>(
-                      value: selectedCategory,
-                      items: categories.map((String category) {
-                        return DropdownMenuItem<String>(
-                          value: category,
-                          child: Text(category),
-                        );
-                      }).toList(),
-                      onChanged: (String? newCategory) {
-                        setState(() {
-                          selectedCategory = newCategory;
-                        });
-                      },
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      if (taskController.text.isEmpty ||
-                          selectedDate == null ||
-                          selectedCategory == null) {
-                        // Show alert if any field is empty
-                        showDialog(
-                          context: context,
-                          builder: (BuildContext context) {
-                            return AlertDialog(
-                              title: Text("Error"),
-                              content: Text("Please fill all fields."),
-                              actions: [
-                                TextButton(
-                                  onPressed: () {
-                                    Navigator.of(context).pop();
-                                  },
-                                  child: Text("OK"),
-                                ),
-                              ],
-                            );
-                          },
-                        );
-                      } else {
-                        // If all fields are filled, add the task
-                        setState(() {
-                          taskList.add({
-                            'task': taskController.text,
-                            'date': selectedDate!
-                                .toLocal()
-                                .toString()
-                                .split(' ')[0],
-                            'category': selectedCategory!,
-                            'isCompleted': 'false',
-                          });
-                          taskController.clear();
-                          errorMessage = null;
-                          _saveTasks(); // Save tasks after adding a new one
-                        });
-                        Navigator.of(context).pop();
-                      }
-                    },
-                    child: Text("OK"),
-                  ),
-                ],
-              );
-            },
-          );
-        },
+        backgroundColor: Color(0xFF399EF6),
+        onPressed: () => _showTaskDialog(),
         child: Icon(Icons.add),
-        backgroundColor: Color(0xFF399EF6), // Match the app bar color
       ),
     );
   }
