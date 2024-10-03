@@ -3,12 +3,14 @@ import 'package:daily_task_tracker/ReminderScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
-// import 'package:flutter_segmented_button/flutter_segmented_button.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/standalone.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
 void main() {
   runApp(MyApp());
 }
-
 class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -18,7 +20,6 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
 class HomeScreen extends StatefulWidget {
   @override
   _HomeScreenState createState() => _HomeScreenState();
@@ -33,12 +34,27 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isNotificationEnabled = true;
   String _selectedFilter = 'All';
 
+  FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
   @override
   void initState() {
     super.initState();
+    _initializeNotifications();
+    tz.initializeTimeZones(); // Initialize timezone database
     _loadTasks();
   }
 
+  void _initializeNotifications() {
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    final InitializationSettings initializationSettings =
+        InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+    flutterLocalNotificationsPlugin.initialize(initializationSettings);
+  }
   Future<void> _loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
     List<String>? tasks = prefs.getStringList('tasks');
@@ -48,8 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
             return {
               'task': parts[0],
               'date': parts[1],
-              'category': parts[2],
-              'isCompleted': parts[3],
+              'time': parts[2],
+              'category': parts[3],
+              'isCompleted': parts[4],
             };
           }).toList() ??
           [];
@@ -57,65 +74,93 @@ class _HomeScreenState extends State<HomeScreen> {
           taskList.where((task) => task['isCompleted'] == 'true').length;
     });
   }
-
   Future<void> _saveTasks() async {
     final prefs = await SharedPreferences.getInstance();
     List<String> tasks = taskList.map((task) {
-      return '${task['task']}|${task['date']}|${task['category']}|${task['isCompleted']}';
+      return '${task['task']}|${task['date']}|${task['time']}|${task['category']}|${task['isCompleted']}';
     }).toList();
     await prefs.setStringList('tasks', tasks);
   }
-
-  Future<void> _editTask(
-      int index, String newTask, String newDate, String newCategory) async {
+  Future<void> _editTask(int index, String newTask, String newDate,
+      String newTime, String newCategory) async {
     setState(() {
       taskList[index]['task'] = newTask;
       taskList[index]['date'] = newDate;
+      taskList[index]['time'] = newTime;
       taskList[index]['category'] = newCategory;
-      _saveTasks(); // Save tasks after editing
+      _saveTasks();
     });
   }
-
   void _toggleCompletion(int index, bool? isChecked) {
     setState(() {
       taskList[index]['isCompleted'] = isChecked! ? 'true' : 'false';
       completedTasks =
           taskList.where((task) => task['isCompleted'] == 'true').length;
-      _saveTasks(); // Save tasks after completion change
+      _saveTasks();
     });
   }
-
   void _deleteTask(int index) {
     setState(() {
       taskList.removeAt(index);
-      _saveTasks(); // Save tasks after deletion
+      _saveTasks();
     });
   }
-
-  void _showTaskDialog({int? index}) {
-    String? selectedCategory = 'Work'; // Default category
-    DateTime? selectedDate;
-    if (index != null) {
-      selectedCategory = taskList[index]['category'];
-      taskController.text = taskList[index]['task']!;
-      selectedDate = DateTime.parse(taskList[index]['date']!);
-    }
-
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(index == null ? "Add Task" : "Edit Task",
-              style: GoogleFonts.roboto()),
-          content: Column(
+ void _showTaskDialog({int? index}) {
+  String? selectedCategory = 'Work';
+  DateTime? selectedDate;
+  TimeOfDay? selectedTime;
+  if (index != null) {
+    selectedCategory = taskList[index]['category'];
+    taskController.text = taskList[index]['task']!;
+    selectedDate = DateTime.parse(taskList[index]['date']!);
+    selectedTime = TimeOfDay(
+      hour: int.parse(taskList[index]['time']!.split(':')[0]),
+      minute: int.parse(taskList[index]['time']!.split(':')[1]),
+    );
+  }
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20.0),
+        ),
+        backgroundColor: Colors.white,
+        title: Text(
+          index == null ? "Add Task" : "Edit Task",
+          style: GoogleFonts.roboto(
+            fontSize: 22,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF399EF6),
+          ),
+        ),
+        content: SingleChildScrollView(
+          child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: taskController,
-                decoration: InputDecoration(hintText: 'Enter your task'),
+                style: TextStyle(fontSize: 16, color: Colors.black87),
+                decoration: InputDecoration(
+                  hintText: 'Enter your task',
+                  filled: true,
+                  fillColor: Color(0xFFEFEFEF),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding:
+                      EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+                ),
               ),
               SizedBox(height: 10),
-              TextButton(
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF399EF6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
                 child: Text("Pick Date"),
                 onPressed: () {
                   showDatePicker(
@@ -127,7 +172,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (pickedDate != null) {
                       setState(() {
                         selectedDate = pickedDate;
-                        errorMessage = null; // Clear error message
+                        errorMessage = null;
                       });
                     } else {
                       setState(() {
@@ -138,8 +183,46 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               SizedBox(height: 10),
-              DropdownButton<String>(
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Color(0xFF399EF6),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                ),
+                child: Text("Pick Time"),
+                onPressed: () {
+                  showTimePicker(
+                    context: context,
+                    initialTime: selectedTime ?? TimeOfDay.now(),
+                  ).then((pickedTime) {
+                    if (pickedTime != null) {
+                      setState(() {
+                        selectedTime = pickedTime;
+                        errorMessage = null;
+                      });
+                    } else {
+                      setState(() {
+                        errorMessage = "Please select a time.";
+                      });
+                    }
+                  });
+                },
+              ),
+              SizedBox(height: 10),
+              DropdownButtonFormField<String>(
                 value: selectedCategory,
+                style: TextStyle(fontSize: 16, color: Colors.black),
+                decoration: InputDecoration(
+                  filled: true,
+                  fillColor: Color(0xFFEFEFEF),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(15),
+                    borderSide: BorderSide.none,
+                  ),
+                  contentPadding: EdgeInsets.symmetric(
+                      vertical: 10, horizontal: 15),
+                ),
                 items: ['Work', 'Personal', 'Study'].map((String category) {
                   return DropdownMenuItem<String>(
                     value: category,
@@ -162,52 +245,95 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
             ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                if (taskController.text.isEmpty ||
-                    selectedDate == null ||
-                    selectedCategory == null) {
+        ),
+        actions: [
+          TextButton(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red,
+              textStyle: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Color(0xFF399EF6),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+            ),
+            onPressed: () {
+              if (taskController.text.isEmpty ||
+                  selectedDate == null ||
+                  selectedTime == null ||
+                  selectedCategory == null) {
+                setState(() {
+                  errorMessage = "Please fill all fields.";
+                });
+              } else {
+                if (index == null) {
                   setState(() {
-                    errorMessage = "Please fill all fields.";
+                    taskList.add({
+                      'task': taskController.text,
+                      'date': selectedDate!.toLocal().toString().split(' ')[0],
+                      'time': selectedTime!.format(context),
+                      'category': selectedCategory!,
+                      'isCompleted': 'false',
+                    });
+                    taskController.clear();
+                    errorMessage = null;
                   });
                 } else {
-                  if (index == null) {
-                    // Add new task
-                    setState(() {
-                      taskList.add({
-                        'task': taskController.text,
-                        'date':
-                            selectedDate!.toLocal().toString().split(' ')[0],
-                        'category': selectedCategory!,
-                        'isCompleted': 'false',
-                      });
-                      taskController.clear();
-                      errorMessage = null;
-                    });
-                  } else {
-                    // Edit existing task
-                    _editTask(
-                        index,
-                        taskController.text,
-                        selectedDate!.toLocal().toString().split(' ')[0],
-                        selectedCategory!);
-                  }
-                  _saveTasks(); // Save tasks after adding or editing
-                  Navigator.of(context).pop();
+                  _editTask(
+                    index,
+                    taskController.text,
+                    selectedDate!.toLocal().toString().split(' ')[0],
+                    selectedTime!.format(context),
+                    selectedCategory!,
+                  );
                 }
-              },
-              child: Text(index == null ? "Add" : "Save"),
-            ),
-          ],
-        );
-      },
+                _saveTasks();
+                Navigator.of(context).pop();
+              }
+            },
+            child: Text(index == null ? "Add" : "Save"),
+          ),
+        ],
+      );
+    },
+  );
+}
+
+
+  void _scheduleNotification(int index, DateTime scheduledTime) async {
+    var androidDetails = const AndroidNotificationDetails(
+      'task_channel',
+      'Task Notifications',
+      importance: Importance.high,
+    );
+    var platformDetails = NotificationDetails(android: androidDetails);
+
+    // Convert DateTime to TZDateTime for scheduling
+    tz.TZDateTime tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      index, // unique ID for each notification
+      'Task Reminder',
+      'You have a task: ${taskList[index]['task']}',
+      tzScheduledTime,
+      platformDetails,
+      androidAllowWhileIdle: true,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.wallClockTime,
+      matchDateTimeComponents:
+          DateTimeComponents.time, // Trigger notification at the specific time
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Create a filtered task list based on the selected filter and search query
     List<Map<String, String>> filteredTasks = taskList
         .where((task) {
           final searchQuery = searchController.text.toLowerCase();
@@ -267,12 +393,11 @@ class _HomeScreenState extends State<HomeScreen> {
             decoration: InputDecoration(
               hintText: 'Search by task or date',
               border: OutlineInputBorder(),
-              fillColor: Color(0xFF399EF6), // Set the background color
-              filled: true, // Enable filling
+              fillColor: Color(0xFF399EF6),
+              filled: true,
             ),
             onChanged: (value) {
-              setState(
-                  () {}); // Update the filtered tasks on search input change
+              setState(() {});
             },
           ),
           // Segmented Control for filtering tasks
@@ -348,7 +473,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           title: Text(filteredTasks[index]['task'] ?? '',
                               style: GoogleFonts.roboto()),
                           subtitle: Text(
-                              "${filteredTasks[index]['date']} - ${filteredTasks[index]['category']}",
+                              "${filteredTasks[index]['date']} ${filteredTasks[index]['time']} - ${filteredTasks[index]['category']}",
                               style: TextStyle(color: Colors.grey[600])),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -405,6 +530,25 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ? Icons.notifications
                                     : Icons.notifications_off),
                                 onPressed: () {
+                                  if (_isNotificationEnabled) {
+                                    DateTime taskDate = DateTime.parse(
+                                        taskList[index]['date']!);
+                                    TimeOfDay taskTime = TimeOfDay(
+                                        hour: int.parse(taskList[index]['time']!
+                                            .split(':')[0]),
+                                        minute: int.parse(taskList[index]
+                                                ['time']!
+                                            .split(':')[1]));
+                                    DateTime scheduledTime = DateTime(
+                                        taskDate.year,
+                                        taskDate.month,
+                                        taskDate.day,
+                                        taskTime.hour,
+                                        taskTime.minute);
+
+                                    _scheduleNotification(index, scheduledTime);
+                                  }
+
                                   setState(() {
                                     _isNotificationEnabled =
                                         !_isNotificationEnabled;
