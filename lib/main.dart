@@ -3,7 +3,7 @@ import 'package:daily_task_tracker/ReminderScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
-//import 'package:flutter_segmented_button/flutter_segmented_button.dart';
+// import 'package:flutter_segmented_button/flutter_segmented_button.dart';
 
 void main() {
   runApp(MyApp());
@@ -26,11 +26,12 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController taskController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
   List<Map<String, String>> taskList = [];
   int completedTasks = 0;
   String? errorMessage;
   bool _isNotificationEnabled = true;
-  String _selectedFilter = 'All'; // Filter variable
+  String _selectedFilter = 'All';
 
   @override
   void initState() {
@@ -206,12 +207,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Create a filtered task list based on the selected filter
-    List<Map<String, String>> filteredTasks = _selectedFilter == 'All'
-        ? taskList
-        : taskList
-            .where((task) => task['category'] == _selectedFilter)
-            .toList();
+    // Create a filtered task list based on the selected filter and search query
+    List<Map<String, String>> filteredTasks = taskList
+        .where((task) {
+          final searchQuery = searchController.text.toLowerCase();
+          return (task['task']!.toLowerCase().contains(searchQuery) ||
+              task['date']!.contains(searchQuery));
+        })
+        .where((task) =>
+            _selectedFilter == 'All' || task['category'] == _selectedFilter)
+        .toList();
 
     return Scaffold(
       appBar: AppBar(
@@ -256,6 +261,20 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: Column(
         children: [
+          // Search Bar
+          TextField(
+            controller: searchController,
+            decoration: InputDecoration(
+              hintText: 'Search by task or date',
+              border: OutlineInputBorder(),
+              fillColor: Color(0xFF399EF6), // Set the background color
+              filled: true, // Enable filling
+            ),
+            onChanged: (value) {
+              setState(
+                  () {}); // Update the filtered tasks on search input change
+            },
+          ),
           // Segmented Control for filtering tasks
           Container(
             width: double.infinity,
@@ -277,6 +296,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
           ),
+
           // Progress Bar
           Container(
             height: 60,
