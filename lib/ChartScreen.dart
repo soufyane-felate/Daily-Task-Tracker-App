@@ -9,29 +9,29 @@ class ChartScreen extends StatelessWidget {
   final int studyTasks;
 
   const ChartScreen({
-    Key? key,
+    super.key,
     required this.completedTasks,
     required this.totalTasks,
     required this.workTasks,
     required this.personalTasks,
     required this.studyTasks,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Task Statistics"),
-        backgroundColor: Color(0xFF399EF6),
+        title: const Text("Task Statistics"),
+        backgroundColor: const Color(0xFF399EF6),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Tasks Overview",
+            const Text("Tasks Overview",
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Expanded(
               child: BarChart(
                 BarChartData(
@@ -52,7 +52,7 @@ class ChartScreen extends StatelessWidget {
                       ],
                     ),
                   ],
-                  titlesData: FlTitlesData(
+                  titlesData: const FlTitlesData(
                     leftTitles: AxisTitles(
                       sideTitles: SideTitles(showTitles: true),
                     ),
@@ -64,21 +64,21 @@ class ChartScreen extends StatelessWidget {
                 ),
               ),
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Expanded(
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
                       children: [
-                        Text(
+                        const Text(
                           "Category Breakdown",
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 15),
+                        const SizedBox(height: 15),
                         Expanded(
                           child: PieChart(
                             PieChartData(
@@ -88,7 +88,7 @@ class ChartScreen extends StatelessWidget {
                                   value: workTasks.toDouble(),
                                   title: 'Work',
                                   radius: 50,
-                                  titleStyle: TextStyle(
+                                  titleStyle: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
@@ -98,7 +98,7 @@ class ChartScreen extends StatelessWidget {
                                   value: personalTasks.toDouble(),
                                   title: 'Personal',
                                   radius: 50,
-                                  titleStyle: TextStyle(
+                                  titleStyle: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
@@ -108,7 +108,7 @@ class ChartScreen extends StatelessWidget {
                                   value: studyTasks.toDouble(),
                                   title: 'Study',
                                   radius: 50,
-                                  titleStyle: TextStyle(
+                                  titleStyle: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
@@ -122,18 +122,18 @@ class ChartScreen extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SizedBox(width: 25),
+                  const SizedBox(width: 25),
                   Expanded(
                     child: Column(
                       children: [
-                        Text(
+                        const Text(
                           "Task Completion",
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        SizedBox(height: 15),
+                        const SizedBox(height: 15),
                         Expanded(
                           child: PieChart(
                             PieChartData(
@@ -143,7 +143,7 @@ class ChartScreen extends StatelessWidget {
                                   value: completedTasks.toDouble(),
                                   title: 'Completed',
                                   radius: 50,
-                                  titleStyle: TextStyle(
+                                  titleStyle: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),
@@ -154,7 +154,7 @@ class ChartScreen extends StatelessWidget {
                                       (totalTasks - completedTasks).toDouble(),
                                   title: 'Remaining',
                                   radius: 50,
-                                  titleStyle: TextStyle(
+                                  titleStyle: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Colors.white),

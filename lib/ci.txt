@@ -57,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   String? errorMessage;
   String _selectedFilter = 'All';
 
+  // Add this new state variable
   final Map<int, bool> _taskNotifications = {};
 
   @override
@@ -65,24 +66,13 @@ class _HomeScreenState extends State<HomeScreen> {
     tz.initializeTimeZones();
     _loadTasks();
     _initializeTaskNotifications();
-    AwesomeNotifications().isNotificationAllowed().then((isAllowed) {
-      if (!isAllowed) {
-        AwesomeNotifications().requestPermissionToSendNotifications();
-      }
-    });
     AwesomeNotifications().setListeners(
       onActionReceivedMethod: (ReceivedAction receivedAction) async {
-        if (receivedAction.buttonKeyPressed == 'MARK_DONE') {
-          int taskIndex = receivedAction.id!;
-          if (taskIndex < 1000) {
-            _toggleCompletion(taskIndex, true);
-          }
-        } else if (receivedAction.buttonKeyPressed == 'SNOOZE') {
-          int taskIndex = receivedAction.id!;
-          if (taskIndex < 1000) {
-            DateTime newTime = DateTime.now().add(Duration(minutes: 15));
-            _scheduleNotification(taskIndex, newTime);
-          }
+        // Handle notification actions if needed
+        if (receivedAction.buttonKeyPressed == 'OPEN_SCREEN') {
+          // Navigate to a specific screen based on the notification
+          Navigator.of(context).pushNamed('/notification_details',
+              arguments: receivedAction.payload);
         }
       },
     );
@@ -368,32 +358,14 @@ class _HomeScreenState extends State<HomeScreen> {
         content: NotificationContent(
           id: index,
           channelKey: 'task_channel',
-          title: "Task Reminder",
-          body: "${taskList[index]['task']}",
-          bigPicture: 'resource://drawable/task_reminder',  // Updated image path
-          notificationLayout: NotificationLayout.BigPicture,
-          category: NotificationCategory.Reminder,
-          wakeUpScreen: true,
-          fullScreenIntent: true,
-          criticalAlert: true,
-          color: Color(0xFF399EF6),
-          backgroundColor: Color(0xFFEEF6FF),
+          title: "It's time: ${taskList[index]['task']}",
+          body: "Scheduled for ${taskList[index]['time']}",
+          notificationLayout: NotificationLayout.Default,
         ),
         schedule: NotificationCalendar.fromDate(date: scheduledTime),
-        actionButtons: [
-          NotificationActionButton(
-            key: 'MARK_DONE',
-            label: 'Mark as Done',
-            color: Color(0xFF399EF6),
-          ),
-          NotificationActionButton(
-            key: 'SNOOZE',
-            label: 'Snooze',
-            color: Colors.grey,
-          ),
-        ],
       );
-      print("Notification scheduled: $success for task ${taskList[index]['task']} at $scheduledTime");
+      print(
+          "Notification scheduled: $success for task ${taskList[index]['task']} at $scheduledTime");
     } catch (e) {
       print("Error scheduling notification: $e");
     }
@@ -409,30 +381,14 @@ class _HomeScreenState extends State<HomeScreen> {
       content: NotificationContent(
         id: 1000 + index,
         channelKey: 'task_channel',
-        title: "Task Due Now",
-        body: "${taskList[index]['task']}",
-        summary: "${taskList[index]['category']} - ${taskList[index]['time']}",
-        bigPicture: 'resource://drawable/task_reminder',  // Updated image path
-        notificationLayout: NotificationLayout.BigPicture,
-        category: NotificationCategory.Reminder,
-        wakeUpScreen: true,
-        fullScreenIntent: true,
-        criticalAlert: true,
-        color: Color(0xFF399EF6),
-        backgroundColor: Color(0xFFEEF6FF),
+        title: "It's time: ${taskList[index]['task']}",
+        body:
+            "Time: ${taskList[index]['time']}\nCategory: ${taskList[index]['category']}",
+        notificationLayout: NotificationLayout.BigText,
+        displayOnForeground: true,
+        displayOnBackground: true,
+        autoDismissible: true,
       ),
-      actionButtons: [
-        NotificationActionButton(
-          key: 'MARK_DONE',
-          label: 'Mark as Done',
-          color: Color(0xFF399EF6),
-        ),
-        NotificationActionButton(
-          key: 'SNOOZE',
-          label: 'Snooze',
-          color: Colors.grey,
-        ),
-      ],
     );
   }
 

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 class ReminderScreen extends StatefulWidget {
+  const ReminderScreen({super.key});
+
   @override
   _ReminderScreenState createState() => _ReminderScreenState();
 }
@@ -12,15 +14,15 @@ class _ReminderScreenState extends State<ReminderScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Reminder Settings"),
-        backgroundColor: Color(0xFF399EF6),
+        title: const Text("Reminder Settings"),
+        backgroundColor: const Color(0xFF399EF6),
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
             SwitchListTile(
-              title: Text("Enable Reminders"),
+              title: const Text("Enable Reminders"),
               value: _remindersEnabled,
               onChanged: (bool value) {
                 setState(() {
@@ -29,8 +31,8 @@ class _ReminderScreenState extends State<ReminderScreen> {
               },
             ),
             ListTile(
-              leading: Icon(Icons.alarm),
-              title: Text("Set Reminder Time"),
+              leading: const Icon(Icons.alarm),
+              title: const Text("Set Reminder Time"),
               onTap: () {
                 showTimePicker(
                   context: context,
